@@ -1,0 +1,17 @@
+# getUser.yaml
+name: "getUser"
+description: "Fetch basic public information about a GitHub user by their `username`, including their name, bio, location, and public repository count."
+method: "GET"
+path: "/users/{{username}}"
+inputs:
+  - name: "username"
+    type: "string"
+    description: "The GitHub `username` that uniquely identifies the account."
+    required: true
+annotations:
+  title: "Get User Information"
+  readOnlyHint: true
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+output: "toon"

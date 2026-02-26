@@ -1,6 +1,6 @@
 module github.com/UnitVectorY-Labs/mcp-rest-forge
 
-go 1.24.0 // GOVERSION
+go 1.26.0 // GOVERSION
 
 require (
 	github.com/mark3labs/mcp-go v0.44.0

@@ -1,0 +1,30 @@
+# listRepos.yaml
+name: "listUserRepos"
+description: "List public repositories for a specified GitHub user, with optional sorting and pagination."
+method: "GET"
+path: "/users/{{username}}/repos"
+query_params:
+  - name: "sort"
+    value: "{{sort}}"
+  - name: "per_page"
+    value: "{{per_page}}"
+inputs:
+  - name: "username"
+    type: "string"
+    description: "The GitHub `username` whose repositories to list."
+    required: true
+  - name: "sort"
+    type: "string"
+    description: "The property to sort results by. Can be `created`, `updated`, `pushed`, or `full_name`."
+    required: false
+  - name: "per_page"
+    type: "number"
+    description: "The number of results per page (max 100)."
+    required: false
+annotations:
+  title: "List User Repositories"
+  readOnlyHint: true
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+output: "toon"

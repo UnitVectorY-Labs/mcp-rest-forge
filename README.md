@@ -25,12 +25,12 @@ The server is configured using command line parameters, environment variables, a
 ### Command Line Parameters
 
 - `--forgeConfig`: Specifies the path to the folder containing the YAML configuration files (`forge.yaml` and tool definitions). If set, this takes precedence over the `FORGE_CONFIG` environment variable. If neither is set, the application will return an error and exit.
-- `--forgeDebug`: If provided, enables detailed debug logging to `stderr`, including a SHA-256 hash of the obtained token and the full HTTP request/response for REST calls (with the `Authorization` header redacted). If set, this takes precedence over the `FORGE_DEBUG` environment variable.
+- `--forgeDebug`: If provided, enables detailed debug logging to `stderr` with sanitized HTTP request/response metadata for REST calls (sensitive headers/query params redacted, token values not logged, and request/response bodies omitted except for byte counts). If set, this takes precedence over the `FORGE_DEBUG` environment variable.
 
 ### Environment Variables
 
 - `FORGE_CONFIG`: Specifies the path to the folder containing the YAML configuration files (`forge.yaml` and tool definitions). Used if `--forgeConfig` is not set.
-- `FORGE_DEBUG`: If set to `true` (case-insensitive), enables detailed debug logging to `stderr`, including a SHA-256 hash of the obtained token and the full HTTP request/response for REST calls (with the `Authorization` header redacted). Used if `--forgeDebug` is not set.
+- `FORGE_DEBUG`: If set to `true` (case-insensitive), enables detailed debug logging to `stderr` with sanitized HTTP request/response metadata for REST calls (sensitive headers/query params redacted, token values not logged, and request/response bodies omitted except for byte counts). Used if `--forgeDebug` is not set.
 
 ### forge.yaml
 

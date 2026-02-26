@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -243,5 +245,57 @@ func TestExecuteRESTNon2xxReturnsError(t *testing.T) {
 	}
 	if statusErr.StatusCode != http.StatusNotFound {
 		t.Fatalf("StatusCode = %d, want %d", statusErr.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestRedactHeaderValueForDebug(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		value  string
+		want   string
+	}{
+		{name: "authorization redacted", header: "Authorization", value: "Bearer secret", want: redactedLogValue},
+		{name: "api key redacted", header: "X-API-Key", value: "secret", want: redactedLogValue},
+		{name: "cookie redacted", header: "Cookie", value: "sid=abc", want: redactedLogValue},
+		{name: "non sensitive preserved", header: "Accept", value: "application/json", want: "application/json"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := redactHeaderValueForDebug(tt.header, tt.value)
+			if got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizeURLForDebug(t *testing.T) {
+	u, err := url.Parse("https://api.example.com/search?q=ok&access_token=secret&api_key=abc123")
+	if err != nil {
+		t.Fatalf("parse URL: %v", err)
+	}
+
+	got := sanitizeURLForDebug(u)
+
+	if strings.Contains(got, "secret") || strings.Contains(got, "abc123") {
+		t.Fatalf("sanitized URL leaked sensitive query values: %s", got)
+	}
+	if !strings.Contains(got, "q=ok") {
+		t.Fatalf("sanitized URL removed non-sensitive query param: %s", got)
+	}
+	if !strings.Contains(got, "access_token=REDACTED") {
+		t.Fatalf("expected redacted access_token in URL: %s", got)
+	}
+}
+
+func TestSummarizeBodyForDebugDoesNotIncludeRawBody(t *testing.T) {
+	got := summarizeBodyForDebug([]byte(`{"token":"secret"}`))
+	if strings.Contains(got, "secret") {
+		t.Fatalf("body summary leaked raw body content: %s", got)
+	}
+	if !strings.Contains(got, "content omitted") {
+		t.Fatalf("expected content omission marker in body summary: %s", got)
 	}
 }

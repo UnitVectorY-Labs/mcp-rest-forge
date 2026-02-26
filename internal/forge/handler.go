@@ -3,7 +3,6 @@ package forge
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -206,10 +205,8 @@ func makeHandler(cfg ForgeConfig, tcfg ToolConfig, isDebug bool) server.ToolHand
 			cmd.Env = envList
 
 			if isDebug {
-				log.Printf("Executing token command: %s", cfg.TokenCommand)
-				if len(cmd.Env) > 0 {
-					log.Printf("Environment variables: %v", cmd.Env)
-				}
+				log.Printf("Executing token command")
+				log.Printf("Token command environment variables: %d (values redacted)", len(cmd.Env))
 			}
 
 			// Only get a token if the command is specified
@@ -231,16 +228,9 @@ func makeHandler(cfg ForgeConfig, tcfg ToolConfig, isDebug bool) server.ToolHand
 			}
 			token = "Bearer " + string(bytes.TrimSpace(out))
 
-			if isDebug {
-				log.Printf("Obtained token (sha256): %x\n", sha256.Sum256([]byte(token)))
-			}
 		} else {
 			// No token command specified, proceed with pass through token
 			token, _ = ctx.Value(CtxAuthKey{}).(string)
-
-			if isDebug {
-				log.Printf("Pass through token (sha256): %x\n", sha256.Sum256([]byte(token)))
-			}
 		}
 
 		// 3. Substitute path parameters

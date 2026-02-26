@@ -7,16 +7,16 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
 
 const (
-	defaultHTTPTimeout    = 30 * time.Second
-	maxErrorBodyPreview   = 4096
-	redactedAuthHeaderVal = "REDACTED"
+	defaultHTTPTimeout  = 30 * time.Second
+	maxErrorBodyPreview = 4096
+	redactedLogValue    = "REDACTED"
 )
 
 var defaultRESTHTTPClient = &http.Client{Timeout: defaultHTTPTimeout}
@@ -77,18 +77,7 @@ func ExecuteREST(ctx context.Context, baseURL, method, path string, headers map[
 	}
 
 	if isDebug {
-		log.Println("--- REST Request ---")
-		reqForDump := req.Clone(req.Context())
-		reqForDump.Header = req.Header.Clone()
-		if reqForDump.Header.Get("Authorization") != "" {
-			reqForDump.Header.Set("Authorization", redactedAuthHeaderVal)
-		}
-		if dump, err := httputil.DumpRequestOut(reqForDump, true); err == nil {
-			log.Printf("%s\n", dump)
-		} else {
-			log.Printf("dump error: %v\n", err)
-		}
-		log.Println("--------------------")
+		logRESTRequestDebug(req, body)
 	}
 
 	resp, err := defaultRESTHTTPClient.Do(req)
@@ -103,10 +92,7 @@ func ExecuteREST(ctx context.Context, baseURL, method, path string, headers map[
 	}
 
 	if isDebug {
-		log.Println("--- REST Response ---")
-		log.Printf("Status Code: %d\n", resp.StatusCode)
-		log.Printf("Body: %s\n", respBody)
-		log.Println("---------------------")
+		logRESTResponseDebug(resp, respBody)
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
@@ -157,4 +143,107 @@ func truncateForError(body []byte) string {
 	}
 
 	return string(body[:maxErrorBodyPreview]) + "...(truncated)"
+}
+
+func logRESTRequestDebug(req *http.Request, body []byte) {
+	if req == nil {
+		return
+	}
+
+	log.Println("--- REST Request ---")
+	log.Printf("Method: %s\n", req.Method)
+	if req.URL != nil {
+		log.Printf("URL: %s\n", sanitizeURLForDebug(req.URL))
+	}
+	logHeadersForDebug("Request Headers", req.Header)
+	log.Printf("Body: %s\n", summarizeBodyForDebug(body))
+	log.Println("--------------------")
+}
+
+func logRESTResponseDebug(resp *http.Response, body []byte) {
+	if resp == nil {
+		return
+	}
+
+	log.Println("--- REST Response ---")
+	log.Printf("Status: %s\n", resp.Status)
+	logHeadersForDebug("Response Headers", resp.Header)
+	log.Printf("Body: %s\n", summarizeBodyForDebug(body))
+	log.Println("---------------------")
+}
+
+func logHeadersForDebug(label string, headers http.Header) {
+	log.Printf("%s:\n", label)
+	if len(headers) == 0 {
+		log.Printf("  (none)\n")
+		return
+	}
+
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		vals := headers.Values(k)
+		redactedVals := make([]string, len(vals))
+		for i, v := range vals {
+			redactedVals[i] = redactHeaderValueForDebug(k, v)
+		}
+		log.Printf("  %s: %s\n", k, strings.Join(redactedVals, ", "))
+	}
+}
+
+func summarizeBodyForDebug(body []byte) string {
+	if len(body) == 0 {
+		return "empty"
+	}
+	return fmt.Sprintf("%d bytes (content omitted)", len(body))
+}
+
+func sanitizeURLForDebug(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+
+	clone := *u
+	q := clone.Query()
+	for key, values := range q {
+		if !isSensitiveQueryParamNameForDebug(key) {
+			continue
+		}
+		for i := range values {
+			values[i] = redactedLogValue
+		}
+		q[key] = values
+	}
+	clone.RawQuery = q.Encode()
+
+	return clone.String()
+}
+
+func redactHeaderValueForDebug(name, value string) string {
+	if isSensitiveHeaderNameForDebug(name) {
+		return redactedLogValue
+	}
+	return value
+}
+
+func isSensitiveHeaderNameForDebug(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "api-key", "x-auth-token", "x-access-token":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSensitiveQueryParamNameForDebug(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "access_token", "token", "id_token", "refresh_token", "api_key", "apikey", "key", "client_secret", "password", "sig", "signature":
+		return true
+	default:
+		return false
+	}
 }

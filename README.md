@@ -25,12 +25,12 @@ The server is configured using command line parameters, environment variables, a
 ### Command Line Parameters
 
 - `--forgeConfig`: Specifies the path to the folder containing the YAML configuration files (`forge.yaml` and tool definitions). If set, this takes precedence over the `FORGE_CONFIG` environment variable. If neither is set, the application will return an error and exit.
-- `--forgeDebug`: If provided, enables detailed debug logging to `stderr`, including the obtained token and the full HTTP request/response for REST calls. If set, this takes precedence over the `FORGE_DEBUG` environment variable.
+- `--forgeDebug`: If provided, enables detailed debug logging to `stderr`, including a SHA-256 hash of the obtained token and the full HTTP request/response for REST calls (with the `Authorization` header redacted). If set, this takes precedence over the `FORGE_DEBUG` environment variable.
 
 ### Environment Variables
 
 - `FORGE_CONFIG`: Specifies the path to the folder containing the YAML configuration files (`forge.yaml` and tool definitions). Used if `--forgeConfig` is not set.
-- `FORGE_DEBUG`: If set to `true` (case-insensitive), enables detailed debug logging to `stderr`, including the obtained token and the full HTTP request/response for REST calls. Used if `--forgeDebug` is not set.
+- `FORGE_DEBUG`: If set to `true` (case-insensitive), enables detailed debug logging to `stderr`, including a SHA-256 hash of the obtained token and the full HTTP request/response for REST calls (with the `Authorization` header redacted). Used if `--forgeDebug` is not set.
 
 ### forge.yaml
 
@@ -65,11 +65,11 @@ The following attributes can be specified in the file:
 - `name`: The name of the MCP tool
 - `description`: The description of the MCP tool
 - `method`: The HTTP method to use (e.g. `GET`, `POST`, `PUT`, `PATCH`, `DELETE`)
-- `path`: The URL path appended to the `base_url`; supports `{{paramName}}` template substitution from inputs
+- `path`: The URL path appended to the `base_url`; supports `{{paramName}}` template substitution from inputs (path substitutions are URL-path escaped)
 - `headers`: A map of additional HTTP headers for this specific tool; merged with and overrides headers from `forge.yaml` (optional); supports `{{paramName}}` template substitution
 - `query_params`: A list of query parameters to include in the request (optional)
   - `name`: The query parameter name
-  - `value`: The query parameter value; supports `{{paramName}}` template substitution from inputs
+  - `value`: The query parameter value; supports `{{paramName}}` template substitution from inputs. If a referenced optional input is omitted at runtime, the query parameter is omitted.
 - `body`: The request body configuration (optional)
   - `content_type`: The Content-Type header for the request body (e.g. `application/json`)
   - `template`: The body content as a string template; supports `{{paramName}}` template substitution from inputs
@@ -168,7 +168,7 @@ inputs:
   - name: "body"
     type: "string"
     description: "The issue body content."
-    required: false
+    required: true
 annotations:
   readOnlyHint: false
   destructiveHint: false
@@ -176,6 +176,15 @@ annotations:
   openWorldHint: true
 output: "json"
 ```
+
+### Validation and Request Semantics
+
+- Configuration files are parsed in strict mode; unknown YAML fields cause startup errors (helps catch typos).
+- `path`, `headers`, and `body.template` placeholders must reference declared required inputs.
+- `query_params` may reference optional inputs; missing optional inputs cause the corresponding query parameter to be omitted.
+- When `body.content_type` is JSON (`application/json`), the rendered body must be valid JSON or the tool call fails before the upstream request is sent.
+- Upstream non-2xx REST responses are returned as MCP tool errors (rather than successful tool output).
+- Outbound REST requests use a default 30-second timeout.
 
 ### Output Formats
 

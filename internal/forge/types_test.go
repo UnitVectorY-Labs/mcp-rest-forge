@@ -556,3 +556,98 @@ func TestLoadAppConfigBadForgeYaml(t *testing.T) {
 		t.Error("expected error for invalid forge.yaml")
 	}
 }
+
+func TestLoadForgeConfigRejectsUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	content := `name: "TestServer"
+base_url: "https://api.example.com"
+unexpected_field: "value"
+`
+	path := filepath.Join(dir, "forge.yaml")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadForgeConfig(path)
+	if err == nil {
+		t.Fatal("expected error for unknown forge config field")
+	}
+}
+
+func TestLoadToolConfigRejectsUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	content := `name: "test"
+description: "test"
+method: "GET"
+path: "/test"
+unexpected_field: true
+inputs: []
+`
+	path := filepath.Join(dir, "tool.yaml")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadToolConfig(path)
+	if err == nil {
+		t.Fatal("expected error for unknown tool config field")
+	}
+}
+
+func TestLoadToolConfigRejectsInvalidOutput(t *testing.T) {
+	dir := t.TempDir()
+	content := `name: "test"
+description: "test"
+method: "GET"
+path: "/test"
+output: "yaml"
+inputs: []
+`
+	path := filepath.Join(dir, "tool.yaml")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadToolConfig(path)
+	if err == nil {
+		t.Fatal("expected error for unsupported output format")
+	}
+}
+
+func TestLoadToolConfigRejectsOptionalBodyPlaceholder(t *testing.T) {
+	dir := t.TempDir()
+	content := `name: "createIssue"
+description: "Create issue"
+method: "POST"
+path: "/repos/{{owner}}/{{repo}}/issues"
+body:
+  content_type: "application/json"
+  template: '{"title":"{{title}}","body":"{{body}}"}'
+inputs:
+  - name: "owner"
+    type: "string"
+    description: "owner"
+    required: true
+  - name: "repo"
+    type: "string"
+    description: "repo"
+    required: true
+  - name: "title"
+    type: "string"
+    description: "title"
+    required: true
+  - name: "body"
+    type: "string"
+    description: "body"
+    required: false
+`
+	path := filepath.Join(dir, "tool.yaml")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadToolConfig(path)
+	if err == nil {
+		t.Fatal("expected error for optional body placeholder")
+	}
+}

@@ -41,6 +41,7 @@ func RegisterTools(srv *server.MCPServer, cfg *ForgeConfig, configDir string, is
 	if err != nil {
 		return fmt.Errorf("error discovering tools: %w", err)
 	}
+	seenTools := map[string]string{}
 
 	for _, f := range files {
 		if filepath.Base(f) == "forge.yaml" {
@@ -49,9 +50,13 @@ func RegisterTools(srv *server.MCPServer, cfg *ForgeConfig, configDir string, is
 
 		tcfg, err := LoadToolConfig(f)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", f, err)
-			continue
+			return fmt.Errorf("loading tool config %s: %w", f, err)
 		}
+
+		if prev, exists := seenTools[tcfg.Name]; exists {
+			return fmt.Errorf("duplicate tool name %q in %s and %s", tcfg.Name, prev, f)
+		}
+		seenTools[tcfg.Name] = f
 
 		opts := []mcp.ToolOption{
 			mcp.WithDescription(tcfg.Description),
@@ -86,12 +91,12 @@ func RegisterTools(srv *server.MCPServer, cfg *ForgeConfig, configDir string, is
 			case "number":
 				opts = append(opts, mcp.WithNumber(inp.Name, pOpts...))
 			default:
-				fmt.Fprintf(os.Stderr, "Warning: unsupported type %q in %s\n", inp.Type, tcfg.Name)
+				fmt.Fprintf(os.Stderr, "Error: unsupported type %q in %s\n", inp.Type, tcfg.Name)
 				valid = false
 			}
 		}
 		if !valid {
-			continue
+			return fmt.Errorf("invalid tool configuration: %s", tcfg.Name)
 		}
 
 		tool := mcp.NewTool(tcfg.Name, opts...)
@@ -151,16 +156,6 @@ func processJSONOutput(res []byte, isDebug bool, transformFunc func(interface{})
 	}
 
 	return string(transformed)
-}
-
-// substituteTemplate replaces {{paramName}} placeholders in a template with values from args
-func substituteTemplate(template string, args map[string]interface{}) string {
-	result := template
-	for key, val := range args {
-		placeholder := "{{" + key + "}}"
-		result = strings.ReplaceAll(result, placeholder, fmt.Sprintf("%v", val))
-	}
-	return result
 }
 
 // makeHandler produces a ToolHandler for the given configs
@@ -249,12 +244,22 @@ func makeHandler(cfg ForgeConfig, tcfg ToolConfig, isDebug bool) server.ToolHand
 		}
 
 		// 3. Substitute path parameters
-		resolvedPath := substituteTemplate(tcfg.Path, args)
+		resolvedPath, missing := renderTemplatePath(tcfg.Path, args)
+		if len(missing) > 0 {
+			return mcp.NewToolResultError(
+				fmt.Sprintf("missing arguments required by path template: %s", formatTemplateVarList(missing)),
+			), nil
+		}
 
 		// 4. Build query parameters
 		queryParams := map[string]string{}
 		for _, qp := range tcfg.QueryParams {
-			queryParams[qp.Name] = substituteTemplate(qp.Value, args)
+			rendered, missing := renderTemplateRaw(qp.Value, args)
+			if len(missing) > 0 {
+				// Optional query parameters are omitted when one or more referenced inputs are absent.
+				continue
+			}
+			queryParams[qp.Name] = rendered
 		}
 
 		// 5. Build request body
@@ -262,8 +267,16 @@ func makeHandler(cfg ForgeConfig, tcfg ToolConfig, isDebug bool) server.ToolHand
 		contentType := ""
 		if tcfg.Body != nil {
 			contentType = tcfg.Body.ContentType
-			bodyStr := substituteTemplate(tcfg.Body.Template, args)
+			bodyStr, missing := renderTemplateRaw(tcfg.Body.Template, args)
+			if len(missing) > 0 {
+				return mcp.NewToolResultError(
+					fmt.Sprintf("missing arguments required by body template: %s", formatTemplateVarList(missing)),
+				), nil
+			}
 			bodyBytes = []byte(bodyStr)
+			if strings.Contains(strings.ToLower(contentType), "application/json") && !json.Valid(bodyBytes) {
+				return mcp.NewToolResultError("rendered request body is not valid JSON"), nil
+			}
 		}
 
 		// 6. Merge headers (forge-level defaults + tool-level overrides)
@@ -272,11 +285,17 @@ func makeHandler(cfg ForgeConfig, tcfg ToolConfig, isDebug bool) server.ToolHand
 			mergedHeaders[k] = v
 		}
 		for k, v := range tcfg.Headers {
-			mergedHeaders[k] = substituteTemplate(v, args)
+			rendered, missing := renderTemplateRaw(v, args)
+			if len(missing) > 0 {
+				return mcp.NewToolResultError(
+					fmt.Sprintf("missing arguments required by header %q template: %s", k, formatTemplateVarList(missing)),
+				), nil
+			}
+			mergedHeaders[k] = rendered
 		}
 
 		// 7. Execute REST request
-		res, err := ExecuteREST(cfg.BaseURL, tcfg.Method, resolvedPath, mergedHeaders, queryParams, bodyBytes, contentType, token, isDebug)
+		res, err := ExecuteREST(ctx, cfg.BaseURL, tcfg.Method, resolvedPath, mergedHeaders, queryParams, bodyBytes, contentType, token, isDebug)
 		if err != nil {
 			// Return error result to MCP instead of terminating
 			return mcp.NewToolResultErrorFromErr("REST execution failed", err), nil

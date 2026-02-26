@@ -2,6 +2,7 @@ package forge
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -9,10 +10,40 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 )
 
+const (
+	defaultHTTPTimeout    = 30 * time.Second
+	maxErrorBodyPreview   = 4096
+	redactedAuthHeaderVal = "REDACTED"
+)
+
+var defaultRESTHTTPClient = &http.Client{Timeout: defaultHTTPTimeout}
+
+// HTTPStatusError is returned when the upstream REST API responds with a non-2xx status.
+type HTTPStatusError struct {
+	StatusCode int
+	Status     string
+	Body       string
+}
+
+func (e *HTTPStatusError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Body == "" {
+		return fmt.Sprintf("upstream API returned %s", e.Status)
+	}
+	return fmt.Sprintf("upstream API returned %s: %s", e.Status, e.Body)
+}
+
 // ExecuteREST performs an HTTP request and returns the response body
-func ExecuteREST(baseURL, method, path string, headers map[string]string, queryParams map[string]string, body []byte, contentType string, token string, isDebug bool) ([]byte, error) {
+func ExecuteREST(ctx context.Context, baseURL, method, path string, headers map[string]string, queryParams map[string]string, body []byte, contentType string, token string, isDebug bool) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// Build the full URL
 	fullURL, err := buildURL(baseURL, path, queryParams)
 	if err != nil {
@@ -25,7 +56,7 @@ func ExecuteREST(baseURL, method, path string, headers map[string]string, queryP
 		bodyReader = bytes.NewBuffer(body)
 	}
 
-	req, err := http.NewRequest(strings.ToUpper(method), fullURL, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(method), fullURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -47,7 +78,12 @@ func ExecuteREST(baseURL, method, path string, headers map[string]string, queryP
 
 	if isDebug {
 		log.Println("--- REST Request ---")
-		if dump, err := httputil.DumpRequestOut(req, true); err == nil {
+		reqForDump := req.Clone(req.Context())
+		reqForDump.Header = req.Header.Clone()
+		if reqForDump.Header.Get("Authorization") != "" {
+			reqForDump.Header.Set("Authorization", redactedAuthHeaderVal)
+		}
+		if dump, err := httputil.DumpRequestOut(reqForDump, true); err == nil {
 			log.Printf("%s\n", dump)
 		} else {
 			log.Printf("dump error: %v\n", err)
@@ -55,7 +91,7 @@ func ExecuteREST(baseURL, method, path string, headers map[string]string, queryP
 		log.Println("--------------------")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := defaultRESTHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("execute request: %w", err)
 	}
@@ -73,6 +109,14 @@ func ExecuteREST(baseURL, method, path string, headers map[string]string, queryP
 		log.Println("---------------------")
 	}
 
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, &HTTPStatusError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Body:       truncateForError(respBody),
+		}
+	}
+
 	return respBody, nil
 }
 
@@ -81,6 +125,9 @@ func buildURL(baseURL, path string, queryParams map[string]string) (string, erro
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return "", fmt.Errorf("parse base URL: %w", err)
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return "", fmt.Errorf("base URL must be absolute (got %q)", baseURL)
 	}
 
 	// Join the path
@@ -98,4 +145,16 @@ func buildURL(baseURL, path string, queryParams map[string]string) (string, erro
 	}
 
 	return u.String(), nil
+}
+
+func truncateForError(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+
+	if len(body) <= maxErrorBodyPreview {
+		return string(body)
+	}
+
+	return string(body[:maxErrorBodyPreview]) + "...(truncated)"
 }

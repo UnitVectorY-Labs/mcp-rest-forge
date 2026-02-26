@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -123,10 +124,10 @@ func TestExecuteREST(t *testing.T) {
 			wantBody:       `{"created": true}`,
 		},
 		{
-			name:    "GET with headers",
-			method:  "GET",
-			path:    "/test",
-			headers: map[string]string{"X-Custom": "value"},
+			name:           "GET with headers",
+			method:         "GET",
+			path:           "/test",
+			headers:        map[string]string{"X-Custom": "value"},
 			serverResponse: `{"headers": true}`,
 			serverStatus:   200,
 			wantBody:       `{"headers": true}`,
@@ -189,7 +190,7 @@ func TestExecuteREST(t *testing.T) {
 			}))
 			defer server.Close()
 
-			body, err := ExecuteREST(server.URL, tt.method, tt.path, tt.headers, tt.queryParams, tt.body, tt.contentType, tt.token, false)
+			body, err := ExecuteREST(context.Background(), server.URL, tt.method, tt.path, tt.headers, tt.queryParams, tt.body, tt.contentType, tt.token, false)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -208,7 +209,7 @@ func TestExecuteRESTDebugMode(t *testing.T) {
 	}))
 	defer server.Close()
 
-	body, err := ExecuteREST(server.URL, "GET", "/test", nil, nil, nil, "", "", true)
+	body, err := ExecuteREST(context.Background(), server.URL, "GET", "/test", nil, nil, nil, "", "", true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -219,8 +220,28 @@ func TestExecuteRESTDebugMode(t *testing.T) {
 }
 
 func TestExecuteRESTInvalidURL(t *testing.T) {
-	_, err := ExecuteREST("://invalid", "GET", "/test", nil, nil, nil, "", "", false)
+	_, err := ExecuteREST(context.Background(), "://invalid", "GET", "/test", nil, nil, nil, "", "", false)
 	if err == nil {
 		t.Error("expected error for invalid URL")
+	}
+}
+
+func TestExecuteRESTNon2xxReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	_, err := ExecuteREST(context.Background(), server.URL, "GET", "/missing", nil, nil, nil, "", "", false)
+	if err == nil {
+		t.Fatal("expected error for non-2xx response")
+	}
+
+	statusErr, ok := err.(*HTTPStatusError)
+	if !ok {
+		t.Fatalf("expected *HTTPStatusError, got %T", err)
+	}
+	if statusErr.StatusCode != http.StatusNotFound {
+		t.Fatalf("StatusCode = %d, want %d", statusErr.StatusCode, http.StatusNotFound)
 	}
 }

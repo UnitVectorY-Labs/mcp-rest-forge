@@ -15,7 +15,7 @@ import (
 
 var Version = "dev" // This will be set by the build systems to the release version
 
-func hasSemverPrefix(version string) bool {
+func isSemverFormat(version string) bool {
 	readNumber := func(i int) (int, bool) {
 		start := i
 		for i < len(version) && version[i] >= '0' && version[i] <= '9' {
@@ -40,7 +40,7 @@ func hasSemverPrefix(version string) bool {
 
 func buildVersionOutput(projectName, version string) string {
 	normalized := version
-	if hasSemverPrefix(normalized) && !strings.HasPrefix(normalized, "v") {
+	if isSemverFormat(normalized) && !strings.HasPrefix(normalized, "v") {
 		normalized = "v" + normalized
 	}
 	return fmt.Sprintf("%s version %s (%s, %s/%s)", projectName, normalized, runtime.Version(), runtime.GOOS, runtime.GOARCH)

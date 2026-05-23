@@ -38,3 +38,23 @@ func TestBuildVersionOutputNoVPrefixForDev(t *testing.T) {
 		t.Fatalf("unexpected version output: got %q, want %q", got, want)
 	}
 }
+
+func TestIsSemverFormatEdgeCases(t *testing.T) {
+	cases := []struct {
+		version string
+		want    bool
+	}{
+		{version: "1.2", want: false},
+		{version: "1", want: false},
+		{version: "v1.2.3", want: false},
+		{version: "1.2.3", want: true},
+		{version: "1.2.3-beta", want: true},
+		{version: "1.2.3+metadata", want: true},
+	}
+
+	for _, tc := range cases {
+		if got := isSemverFormat(tc.version); got != tc.want {
+			t.Fatalf("unexpected semver format result for %q: got %v, want %v", tc.version, got, tc.want)
+		}
+	}
+}

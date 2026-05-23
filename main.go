@@ -6,12 +6,24 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
+	"runtime"
 	"runtime/debug"
+	"strings"
 
 	"github.com/UnitVectorY-Labs/mcp-rest-forge/internal/forge"
 )
 
 var Version = "dev" // This will be set by the build systems to the release version
+var semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+`)
+
+func buildVersionOutput(projectName, version string) string {
+	normalized := version
+	if semverRe.MatchString(normalized) && !strings.HasPrefix(normalized, "v") {
+		normalized = "v" + normalized
+	}
+	return fmt.Sprintf("%s version %s (%s, %s/%s)", projectName, normalized, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+}
 
 func main() {
 	// Set the build version from the build info if not set by the build system
@@ -27,12 +39,18 @@ func main() {
 	var httpAddr string
 	var forgeConfigFlag string
 	var forgeDebugFlag bool
+	var versionFlag bool
 
 	flag.StringVar(&httpAddr, "http", "", "run HTTP streamable transport on the given address, e.g. 8080 (defaults to stdio if empty)")
 	flag.StringVar(&forgeConfigFlag, "forgeConfig", "", "path to the folder containing forge.yaml and tool definitions (overrides FORGE_CONFIG env)")
 	flag.BoolVar(&forgeDebugFlag, "forgeDebug", false, "enable debug logging (overrides FORGE_DEBUG env)")
+	flag.BoolVar(&versionFlag, "version", false, "print version and exit")
 
 	flag.Parse()
+	if versionFlag {
+		fmt.Println(buildVersionOutput("mcp-rest-forge", Version))
+		return
+	}
 
 	// Load and validate configuration
 	appConfig, err := forge.LoadAppConfig(forgeConfigFlag, forgeDebugFlag)

@@ -24,6 +24,7 @@ The server is configured using command line parameters, environment variables, a
 
 ### Command Line Parameters
 
+- `--version`: Prints the application version in this format: `mcp-rest-forge version vX.Y.Z (goX.Y, os/arch)`.
 - `--forgeConfig`: Specifies the path to the folder containing the YAML configuration files (`forge.yaml` and tool definitions). If set, this takes precedence over the `FORGE_CONFIG` environment variable. If neither is set, the application will return an error and exit.
 - `--forgeDebug`: If provided, enables detailed debug logging to `stderr` with sanitized HTTP request/response metadata for REST calls (sensitive headers/query params redacted, token values not logged, and request/response bodies omitted except for byte counts). If set, this takes precedence over the `FORGE_DEBUG` environment variable.
 

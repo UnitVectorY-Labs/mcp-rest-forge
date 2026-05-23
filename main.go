@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"regexp"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -15,11 +14,33 @@ import (
 )
 
 var Version = "dev" // This will be set by the build systems to the release version
-var semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+`)
+
+func hasSemverPrefix(version string) bool {
+	readNumber := func(i int) (int, bool) {
+		start := i
+		for i < len(version) && version[i] >= '0' && version[i] <= '9' {
+			i++
+		}
+		return i, i > start
+	}
+
+	i, ok := readNumber(0)
+	if !ok || i >= len(version) || version[i] != '.' {
+		return false
+	}
+
+	i, ok = readNumber(i + 1)
+	if !ok || i >= len(version) || version[i] != '.' {
+		return false
+	}
+
+	_, ok = readNumber(i + 1)
+	return ok
+}
 
 func buildVersionOutput(projectName, version string) string {
 	normalized := version
-	if semverRe.MatchString(normalized) && !strings.HasPrefix(normalized, "v") {
+	if hasSemverPrefix(normalized) && !strings.HasPrefix(normalized, "v") {
 		normalized = "v" + normalized
 	}
 	return fmt.Sprintf("%s version %s (%s, %s/%s)", projectName, normalized, runtime.Version(), runtime.GOOS, runtime.GOARCH)

@@ -129,7 +129,7 @@ func LoadAppConfig(forgeConfigFlag string, debugEnabled bool) (*AppConfig, error
 	}, nil
 }
 
-func loadYAMLStrict(path string, out interface{}) error {
+func loadYAMLStrict(path string, out any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err

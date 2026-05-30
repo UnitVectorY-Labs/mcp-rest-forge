@@ -79,43 +79,43 @@ func TestSubstituteTemplate(t *testing.T) {
 	tests := []struct {
 		name     string
 		template string
-		args     map[string]interface{}
+		args     map[string]any
 		expected string
 	}{
 		{
 			name:     "single substitution",
 			template: "/users/{{username}}",
-			args:     map[string]interface{}{"username": "octocat"},
+			args:     map[string]any{"username": "octocat"},
 			expected: "/users/octocat",
 		},
 		{
 			name:     "multiple substitutions",
 			template: "/repos/{{owner}}/{{repo}}",
-			args:     map[string]interface{}{"owner": "octocat", "repo": "hello-world"},
+			args:     map[string]any{"owner": "octocat", "repo": "hello-world"},
 			expected: "/repos/octocat/hello-world",
 		},
 		{
 			name:     "no substitutions",
 			template: "/status",
-			args:     map[string]interface{}{},
+			args:     map[string]any{},
 			expected: "/status",
 		},
 		{
 			name:     "number substitution",
 			template: "/items/{{id}}",
-			args:     map[string]interface{}{"id": 42},
+			args:     map[string]any{"id": 42},
 			expected: "/items/42",
 		},
 		{
 			name:     "missing parameter unchanged",
 			template: "/users/{{username}}/repos",
-			args:     map[string]interface{}{},
+			args:     map[string]any{},
 			expected: "/users/{{username}}/repos",
 		},
 		{
 			name:     "json body template",
 			template: `{"title": "{{title}}", "body": "{{body}}"}`,
-			args:     map[string]interface{}{"title": "Bug", "body": "Fix it"},
+			args:     map[string]any{"title": "Bug", "body": "Fix it"},
 			expected: `{"title": "Bug", "body": "Fix it"}`,
 		},
 	}

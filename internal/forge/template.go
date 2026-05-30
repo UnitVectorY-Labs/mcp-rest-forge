@@ -12,24 +12,24 @@ var templatePlaceholderPattern = regexp.MustCompile(`\{\{\s*([A-Za-z_][A-Za-z0-9
 
 // substituteTemplate performs a best-effort placeholder replacement and leaves missing placeholders unchanged.
 // It is kept for backwards-compatible behavior and unit tests; request execution should use the stricter helpers.
-func substituteTemplate(template string, args map[string]interface{}) string {
+func substituteTemplate(template string, args map[string]any) string {
 	rendered, _ := renderTemplateRaw(template, args)
 	return rendered
 }
 
-func renderTemplateRaw(template string, args map[string]interface{}) (string, []string) {
-	return renderTemplate(template, args, func(v interface{}) string {
+func renderTemplateRaw(template string, args map[string]any) (string, []string) {
+	return renderTemplate(template, args, func(v any) string {
 		return fmt.Sprintf("%v", v)
 	})
 }
 
-func renderTemplatePath(template string, args map[string]interface{}) (string, []string) {
-	return renderTemplate(template, args, func(v interface{}) string {
+func renderTemplatePath(template string, args map[string]any) (string, []string) {
+	return renderTemplate(template, args, func(v any) string {
 		return url.PathEscape(fmt.Sprintf("%v", v))
 	})
 }
 
-func renderTemplate(template string, args map[string]interface{}, encode func(interface{}) string) (string, []string) {
+func renderTemplate(template string, args map[string]any, encode func(any) string) (string, []string) {
 	if template == "" {
 		return "", nil
 	}

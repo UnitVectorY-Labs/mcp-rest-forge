@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -117,12 +118,12 @@ func processOutput(res []byte, output string, isDebug bool) string {
 		return string(res)
 	case "json":
 		// Minimize JSON by removing unnecessary spacing
-		return processJSONOutput(res, isDebug, func(jsonData interface{}) ([]byte, error) {
+		return processJSONOutput(res, isDebug, func(jsonData any) ([]byte, error) {
 			return json.Marshal(jsonData)
 		}, "minimization")
 	case "toon":
 		// Convert JSON to TOON format
-		return processJSONOutput(res, isDebug, func(jsonData interface{}) ([]byte, error) {
+		return processJSONOutput(res, isDebug, func(jsonData any) ([]byte, error) {
 			return toon.Marshal(jsonData)
 		}, "TOON conversion")
 	default:
@@ -135,8 +136,8 @@ func processOutput(res []byte, output string, isDebug bool) string {
 }
 
 // processJSONOutput is a helper that unmarshals JSON and applies a transformation function
-func processJSONOutput(res []byte, isDebug bool, transformFunc func(interface{}) ([]byte, error), operationName string) string {
-	var jsonData interface{}
+func processJSONOutput(res []byte, isDebug bool, transformFunc func(any) ([]byte, error), operationName string) string {
+	var jsonData any
 	if err := json.Unmarshal(res, &jsonData); err != nil {
 		// If not valid JSON, fall back to raw output
 		if isDebug {
@@ -271,9 +272,7 @@ func makeHandler(cfg ForgeConfig, tcfg ToolConfig, isDebug bool) server.ToolHand
 
 		// 6. Merge headers (forge-level defaults + tool-level overrides)
 		mergedHeaders := map[string]string{}
-		for k, v := range cfg.Headers {
-			mergedHeaders[k] = v
-		}
+		maps.Copy(mergedHeaders, cfg.Headers)
 		for k, v := range tcfg.Headers {
 			rendered, missing := renderTemplateRaw(v, args)
 			if len(missing) > 0 {

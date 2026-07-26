@@ -2,14 +2,14 @@ package forge
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestProcessOutput(t *testing.T) {
@@ -130,12 +130,14 @@ func TestSubstituteTemplate(t *testing.T) {
 	}
 }
 
-func newCallToolRequest(name string, args map[string]any) mcp.CallToolRequest {
-	req := mcp.CallToolRequest{}
-	req.Method = "tools/call"
-	req.Params.Name = name
-	req.Params.Arguments = args
-	return req
+func newCallToolRequest(name string, args map[string]any) *mcp.CallToolRequest {
+	argsJSON, _ := json.Marshal(args)
+	return &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name:      name,
+			Arguments: json.RawMessage(argsJSON),
+		},
+	}
 }
 
 func TestMakeHandler(t *testing.T) {
@@ -590,7 +592,7 @@ inputs:
 		BaseURL: "https://api.example.com",
 	}
 
-	srv := server.NewMCPServer("TestServer", "test")
+	srv := mcp.NewServer(&mcp.Implementation{Name: "TestServer", Version: "test"}, nil)
 	err := RegisterTools(srv, cfg, dir, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -626,7 +628,7 @@ inputs:
 		BaseURL: "https://api.example.com",
 	}
 
-	srv := server.NewMCPServer("TestServer", "test")
+	srv := mcp.NewServer(&mcp.Implementation{Name: "TestServer", Version: "test"}, nil)
 	err := RegisterTools(srv, cfg, dir, false)
 	if err == nil {
 		t.Fatal("expected error for invalid tool input type")

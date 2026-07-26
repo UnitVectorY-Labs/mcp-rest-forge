@@ -563,6 +563,51 @@ func TestMakeHandlerPassthroughToken(t *testing.T) {
 	}
 }
 
+func TestMakeHandlerRequestExtraAuth(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer request-extra-token" {
+			t.Errorf("expected Authorization=Bearer request-extra-token, got %s", auth)
+		}
+		w.Write([]byte(`{"auth": true}`))
+	}))
+	defer ts.Close()
+
+	cfg := ForgeConfig{
+		Name:    "TestServer",
+		BaseURL: ts.URL,
+	}
+
+	tcfg := ToolConfig{
+		Name:        "requestExtraTest",
+		Description: "Test request extra auth",
+		Method:      "GET",
+		Path:        "/test",
+		Inputs:      []InputConfig{},
+	}
+
+	handler := makeHandler(cfg, tcfg, false)
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name:      "requestExtraTest",
+			Arguments: json.RawMessage(`{}`),
+		},
+		Extra: &mcp.RequestExtra{
+			Header: http.Header{
+				"Authorization": []string{"Bearer request-extra-token"},
+			},
+		},
+	}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handler returned error result")
+	}
+}
+
 func TestRegisterTools(t *testing.T) {
 	dir := t.TempDir()
 

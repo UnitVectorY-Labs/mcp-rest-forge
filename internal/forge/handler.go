@@ -209,7 +209,12 @@ func makeHandler(cfg ForgeConfig, tcfg ToolConfig, isDebug bool) mcp.ToolHandler
 			token = "Bearer " + string(bytes.TrimSpace(out))
 
 		} else {
-			token, _ = ctx.Value(CtxAuthKey{}).(string)
+			if extra := req.GetExtra(); extra != nil {
+				token = extra.Header.Get("Authorization")
+			}
+			if token == "" {
+				token, _ = ctx.Value(CtxAuthKey{}).(string)
+			}
 		}
 
 		resolvedPath, missing := renderTemplatePath(tcfg.Path, args)

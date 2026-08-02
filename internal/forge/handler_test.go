@@ -2,14 +2,14 @@ package forge
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestProcessOutput(t *testing.T) {
@@ -130,12 +130,14 @@ func TestSubstituteTemplate(t *testing.T) {
 	}
 }
 
-func newCallToolRequest(name string, args map[string]any) mcp.CallToolRequest {
-	req := mcp.CallToolRequest{}
-	req.Method = "tools/call"
-	req.Params.Name = name
-	req.Params.Arguments = args
-	return req
+func newCallToolRequest(name string, args map[string]any) *mcp.CallToolRequest {
+	argsJSON, _ := json.Marshal(args)
+	return &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name:      name,
+			Arguments: json.RawMessage(argsJSON),
+		},
+	}
 }
 
 func TestMakeHandler(t *testing.T) {
@@ -561,6 +563,51 @@ func TestMakeHandlerPassthroughToken(t *testing.T) {
 	}
 }
 
+func TestMakeHandlerRequestExtraAuth(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer request-extra-token" {
+			t.Errorf("expected Authorization=Bearer request-extra-token, got %s", auth)
+		}
+		w.Write([]byte(`{"auth": true}`))
+	}))
+	defer ts.Close()
+
+	cfg := ForgeConfig{
+		Name:    "TestServer",
+		BaseURL: ts.URL,
+	}
+
+	tcfg := ToolConfig{
+		Name:        "requestExtraTest",
+		Description: "Test request extra auth",
+		Method:      "GET",
+		Path:        "/test",
+		Inputs:      []InputConfig{},
+	}
+
+	handler := makeHandler(cfg, tcfg, false)
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name:      "requestExtraTest",
+			Arguments: json.RawMessage(`{}`),
+		},
+		Extra: &mcp.RequestExtra{
+			Header: http.Header{
+				"Authorization": []string{"Bearer request-extra-token"},
+			},
+		},
+	}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handler returned error result")
+	}
+}
+
 func TestRegisterTools(t *testing.T) {
 	dir := t.TempDir()
 
@@ -590,7 +637,7 @@ inputs:
 		BaseURL: "https://api.example.com",
 	}
 
-	srv := server.NewMCPServer("TestServer", "test")
+	srv := mcp.NewServer(&mcp.Implementation{Name: "TestServer", Version: "test"}, nil)
 	err := RegisterTools(srv, cfg, dir, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -626,7 +673,7 @@ inputs:
 		BaseURL: "https://api.example.com",
 	}
 
-	srv := server.NewMCPServer("TestServer", "test")
+	srv := mcp.NewServer(&mcp.Implementation{Name: "TestServer", Version: "test"}, nil)
 	err := RegisterTools(srv, cfg, dir, false)
 	if err == nil {
 		t.Fatal("expected error for invalid tool input type")

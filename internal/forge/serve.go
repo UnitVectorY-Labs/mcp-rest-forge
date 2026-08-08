@@ -30,7 +30,7 @@ func serveHTTP(srv *mcp.Server, httpAddr string, isDebug bool) error {
 
 	handler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return srv
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{Stateless: true})
 
 	if isDebug {
 		fmt.Printf("Streamable HTTP Endpoint: http://localhost:%s/mcp\n", httpAddr)

@@ -3,7 +3,8 @@ package forge
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"log"
 	"maps"
@@ -246,7 +247,7 @@ func makeHandler(cfg ForgeConfig, tcfg ToolConfig, isDebug bool) mcp.ToolHandler
 				}, nil
 			}
 			bodyBytes = []byte(bodyStr)
-			if strings.Contains(strings.ToLower(contentType), "application/json") && !json.Valid(bodyBytes) {
+			if strings.Contains(strings.ToLower(contentType), "application/json") && !jsontext.Value(bodyBytes).IsValid() {
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{&mcp.TextContent{Text: "rendered request body is not valid JSON"}},
 					IsError: true,

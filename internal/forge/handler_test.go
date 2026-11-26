@@ -2,11 +2,12 @@ package forge
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -75,6 +76,46 @@ func TestProcessOutputToon(t *testing.T) {
 	}
 }
 
+func TestStrictJSONBoundaries(t *testing.T) {
+	invalid := map[string]string{
+		"duplicate names": `{"key":1,"key":2}`,
+		"invalid UTF-8":   "{\"key\":\"\xff\"}",
+	}
+	for name, input := range invalid {
+		t.Run(name, func(t *testing.T) {
+			called := false
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+			}))
+			defer ts.Close()
+
+			cfg := ForgeConfig{BaseURL: ts.URL}
+			tcfg := ToolConfig{Method: "POST", Path: "/", Body: &BodyConfig{ContentType: "application/json", Template: `{}`}}
+			handler := makeHandler(cfg, tcfg, false)
+			req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Arguments: []byte(input)}}
+			result, err := handler(context.Background(), req)
+			if err != nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "failed to parse arguments") {
+				t.Fatalf("invalid arguments: result = %#v, err = %v", result, err)
+			}
+
+			tcfg.Body.Template = input
+			handler = makeHandler(cfg, tcfg, false)
+			result, err = handler(context.Background(), newCallToolRequest("test", map[string]any{}))
+			if err != nil || !result.IsError || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "rendered request body is not valid JSON") {
+				t.Fatalf("invalid body: result = %#v, err = %v", result, err)
+			}
+			if called {
+				t.Fatal("invalid JSON reached upstream server")
+			}
+			for _, format := range []string{"json", "toon"} {
+				if got := processOutput([]byte(input), format, false); got != input {
+					t.Errorf("%s output = %q, want unmodified %q", format, got, input)
+				}
+			}
+		})
+	}
+}
+
 func TestSubstituteTemplate(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -135,7 +176,7 @@ func newCallToolRequest(name string, args map[string]any) *mcp.CallToolRequest {
 	return &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{
 			Name:      name,
-			Arguments: json.RawMessage(argsJSON),
+			Arguments: argsJSON,
 		},
 	}
 }
@@ -590,7 +631,7 @@ func TestMakeHandlerRequestExtraAuth(t *testing.T) {
 	req := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{
 			Name:      "requestExtraTest",
-			Arguments: json.RawMessage(`{}`),
+			Arguments: []byte(`{}`),
 		},
 		Extra: &mcp.RequestExtra{
 			Header: http.Header{
